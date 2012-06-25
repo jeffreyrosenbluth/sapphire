@@ -36,7 +36,7 @@ class Group(object):
             self.cards = cards 
 
     def show(self, title = None):  
-        if title: print '*** ' + title.upper() + ' *** (' + str(len(self.cards)) +')'
+        if title: print title.upper() + ' : ' + str(len(self.cards))
         for j in range(20): print '-',
         not_empty = False
         print
@@ -84,18 +84,22 @@ class Hand(Group):
     """A gin rummy hand"""
     def __init__(self, text = None):
         super(Hand, self).__init__()
-        self.orgs = []
+        self.orgs = frozenset()
         if text:
             self.enter(text)
 
-    def show_orgs(self, title = None):
-        print '*** ARRANGEMENTS ***'
+    def show_orgs(self):
+        n = len(self.orgs)
+        print 'ARRANGEMENTS : ',n
+        for j in range(20): print '-',
+        print
         for o in self.orgs:
             for arr in sorted(o, key = lambda x: len(x), reverse = True):
                 for a in sorted(arr):
                     print a.format(),
                 print  
-            print                      
+            print 'MELD COUNT: ', meld_count(o)
+            print                     
 
     def run(self, suit, cards):
         def runner(cs, rs):
@@ -157,7 +161,6 @@ class Hand(Group):
         self.orgs = uniqify(q)
         
 
-#
 ############################################################################################
 
 def conflict(r, s):
@@ -183,6 +186,51 @@ def uniqify(lst):
     """convert a nested list of lists into a nested frozenset of frozensets"""
     return frozenset(map(uniqify, lst))  if isinstance(lst, list) else lst       
 
+def meld_count(ohand):
+    return sum([min(len(t),4) for t in ohand if len(t) >= 3])
+
+def possible_runs(card, opponent_known, unknown):
+    uk = Group(opponent_known.cards + unknown.cards)
+    hits = 0
+    def in_u(c):
+        return c in uk
+    cu = (card.rank + 1,card.suit)
+    cuu = (card.rank + 2,card.suit)
+    cd = (card.rank - 1,card.suit)
+    cdd = (card.rank - 2,card.suit)
+    isin = map(in_u, [cdd, cd, uk.rank, cu, cuu])
+    for i in range(3):
+        if all(isin[i:i + 3]):
+            hits += 1
+    return hits
+
+def wildness(card, myhand, opponent_known, discards, unknown):
+    combos = [3,1,0,0]
+    known = Group(myhand.cards + discards.cards)
+    r = len([c.rank for c in known.cards if c.rank == card.rank])
+    hits = combos[r] + possible_runs(card, opponent_known, unknown)
+    return hits
+
+def goodness(card, myhand, opponent_known, discards, unknown):
+    result = 0
+    for h in myhand.orgs:
+        for s in h:
+            if card in s and len(s) >= 3:
+                result = 1
+    return result          
+
+def throw(myhand, opponent_known, discards, unknown):  
+    candidates = [c for c in myhand.cards if goodness(c, myhand, opponent_known, discards, unknown) == 0]
+    card_wildness = 6
+    card = (0,'')
+    for c in candidates:
+        c_wild = wildness(c, myhand, opponent_known, discards, unknown)
+        if c_wild <= card_wildness:
+            card_wildness = c_wild 
+            card = c 
+    return card
+
+############################################################################################
 
 def game_sim():
     """ Play gin without a physical deck"""
@@ -190,16 +238,21 @@ def game_sim():
     hand = Hand()
     opponent = Hand()
     discards = Group([deck.cards.pop()])
+    for i in range(4):
+        print
     for i in range(10):
         hand.cards.append(deck.cards.pop())
     print
+    hand.cards.append(discards.cards.pop())
     hand.show(title = "sapphire's hand")
     opponent.show(title = "opponent's hand")
     deck.show(title = 'deck')
     discards.show(title = 'discard pile')
     hand.possibilities()
-    hand.show_orgs(title = 'q')
-    print hand.points()
+    hand.show_orgs()
+    print '*** POINTS: ', hand.points()
+    thwow_choice = throw(hand, opponent, discards, deck)
+    print thwow_choice.format()
 
 
 game_sim()
