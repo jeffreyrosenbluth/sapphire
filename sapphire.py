@@ -6,9 +6,8 @@ from itertools import *
 
 class Card(object):
     """ playing card
-        location: p = pick pile, h = sapphire's hand
-        u = opponents uknown hand, k = opponents known hand
-        d = discards """
+        location: p = pick pile, h = sapphire's hand, g = sapphire's unknown,
+        u = opponents uknown hand, k = opponents known hand, d = discards """
     def __init__(self, rank, suit, position):
         self.rank = rank
         self.suit = suit
@@ -59,6 +58,7 @@ def show_locations(deck, location):
     print    
 
 def get_location(deck, location):
+    """ the subset of the deck with in location """
     return [c for row in deck for c in row if c.location == location]   
 
 def get_card(deck, rank, suit):
@@ -66,6 +66,14 @@ def get_card(deck, rank, suit):
     row = 'SCHD'.index(suit)
     col = 'A23456789TJQK'.index(rank)
     return deck[row][col]
+
+def get_adjacent_card(deck, card, offset):
+    """ get the card of the same suit offset cards to the right """
+    col = card.col + offset
+    if col not in range(13):
+        return None
+    else:
+        return deck[card.row][col]   
 
 def get_coord(deck, position):
     """ return the coordinates in the deck for a position
@@ -169,44 +177,91 @@ def uniqify(seq):
     """convert a nested list of lists into a nested frozenset of frozensets"""
     return frozenset(map(uniqify, seq))  if isinstance(seq, list) else seq   
 
-def meld_count(seq, cards = True):
+def meld_count(seq):
     """ number of melds and the number of cards that are in melds """
     melds = [s for s in seq if len(s) >= 3]
-    num = len(melds)
     cs = sum([min(len(t),4) for t in melds]) 
-    return cs if cards else num   
+    return cs  
 
 def possibilities(deck, location):
+    """ generate a list of ways to organize a hand (location)
+        only consider hands with the maximum number of melds
+        mmc, then add pairs and only accept hands with max 
+        number of melds plus pairs """
     cards = [c for row in deck for c in row if c.location == location]
     allruns = flatten([runs(deck, s, location) for s in 'SCHD'])
     r3 = [r for r in allruns if len(r) >= 3]
     r2 = [r for r in allruns if len(r) == 2]
     allsets = sets(deck, location)
     s4 = [s for s in allsets if len(s) == 4]
+    # if there is a set of 4 add in the subsets of lenght 3
     s4 = s4 + flatten([map(list,(combinations(s,3))) for s in s4])
     s3 = [s for s in allsets if len(s) == 3]
     s3 = s3 + s4
     s2 = [s for s in allsets if len(s) == 2]
+
+    # create a list of combinations of set and run melds taken
+    # 1,2, and 3 at a time
     p = [[]]
     for i in range(1,4):
         p += [list(e) for e in combinations(r3 + s3,i)] 
+
+    # eliminated lists that contain melds that share cards     
     p = [e for e in p if no_conflicts(e)]
+
+    # calculate the maximum number of melds and eliminate
+    # all the hands that have less
     mmc = max([len(e) for e in p])
     p = [e for e in p if len(e) == mmc]
+
+    # calculate the maximum number of pairs that can be added
+    # to a hand with mmc melds of at least 3 cards each. And then
+    # proceed for pairs as with melds
     q = [[]]
     max_pairs = int((11 - mmc * 3) / 2) + 1 
     for i in range(1,max_pairs):
         q += [list(e) for e in combinations(r2 + s2,i)]
     q = [e for e in q if no_conflicts(e)] 
+
+    # consider adding the pairs to the melds and then eliminated
+    # pairs that use cards from melds
     q = [e + f for e in p for f in q]
     q = map(remove_conflicts, q)
     mmd = max([len(e) for e in q])
     q = [e for e in q if len(e) == mmd]
+
+    # fill the rest of the hand with single cards
     for x in q:
         for y in cards:
             if not y in flatten(x):
                 x.append([y])
     return uniqify(q)
+
+def possible_runs(deck, card):
+    """ to calculate wildness from sapphires perspective ONLY """
+    opp = get_location(deck, 'u') + get_location(deck, 'p') + [card]
+    hits = 0
+    cu = get_adjacent_card(deck, card, 1)
+    cuu = get_adjacent_card(deck, card, 2)
+    cd = get_adjacent_card(deck, card, -1)
+    cdd = get_adjacent_card(deck, card, -2)
+    isin = [c in opp for c in [cdd, cd, card, cu, cuu]]
+    for i in range(3):
+        if all(isin[i:i + 3]):
+            hits += 1
+    return hits
+
+def wildness(deck, card):
+    """ how many pairs of cards could be in the opponents hand
+        that the card would make into a meld -- sapphires perspective
+        ONLY """
+    combos = [3,1,0,0]
+    known = get_location(deck, 'h') + get_location(deck, 'd')
+
+    # subtract 1 since the card is in sapphires hand
+    r = len([c.rank for c in known if c.rank == card.rank]) - 1
+    hits = combos[r] + possible_runs(deck, card)
+    return hits
 
 def best_hand(hands):
     min_points = 110
@@ -301,6 +356,7 @@ def deal():
     while game and cards_left > 2:
         print '.',
         if sapphire_turn:
+            print wildness(deck, discard)
             discard, game = take_turn(deck, 'h', discard, knock_value)
             if not game:
                 sapphire_wins = True
@@ -329,9 +385,12 @@ def play():
     print 'Sapphire: %3i Opponent %3i' % (s_score, o_score)  
 
 def test():
-    deck = make_deck()
-    set_locations(deck, 'AH AC AD 2S 3S AS 4S 9C JS JC', 'h')
+    deck = make_deck(shuffle = True)
+    # set_locations(deck, 'AH AC AD 2S 3S AS 4S 9C JS JC', 'h')
     # set_locations(deck, 'AH 2C 3D 4S 5C 6S 7D 8C 9S TC', 'h')
+    for pos in range(10):
+        row, col = get_coord(deck,pos)
+        deck[row][col].location = 'h'
     show_locations(deck, 'h')
     print
     p = possibilities(deck, 'h')
