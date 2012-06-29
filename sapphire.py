@@ -356,7 +356,6 @@ def deal():
     while game and cards_left > 2:
         print '.',
         if sapphire_turn:
-            print wildness(deck, discard)
             discard, game = take_turn(deck, 'h', discard, knock_value)
             if not game:
                 sapphire_wins = True
