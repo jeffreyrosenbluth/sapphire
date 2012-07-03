@@ -299,6 +299,29 @@ def pick_from_deck(deck):
     row, col = get_coord(deck, idx)
     return deck[row][col]  
 
+def sapphire_throw(deck, location):
+    cards = [c for row in deck for c in row if c.location == location]
+    poss = possibilities(deck, location)
+    min_points = 110
+    for h in poss:
+        p = points(h)
+        if p < min_points:
+            min_points = p
+            hand = h 
+    throws = [s for s in hand if len(s) < 2]
+    if not throws:           
+        throws = [s for s in hand if len(s) < 3]
+    if not throws:    
+        throws = [s for s in hand]
+    throws = flatten(throws)
+    min_wild = 7
+    for c in throws:
+        w = wildness(deck, c)
+        if w < min_wild:
+            min_wild = w
+            card = c
+    return card  
+          
 def choose_throw(deck, location):
     cards = [c for row in deck for c in row if c.location == location]
     poss = possibilities(deck, location)
@@ -311,18 +334,22 @@ def choose_throw(deck, location):
     throws = [s for s in hand if len(s) < 2]
     if not throws:           
         throws = [s for s in hand if len(s) < 3]
-    throws = flatten(throws)    
-    max_points = 0
+    if not throws:    
+        throws = [s for s in hand]
+    throws = flatten(throws) 
+    max_points = -1
     for c in throws:
         p = c.col
         if p > max_points:
             max_points = p
             card = c
-    return c        
+    return card  
 
 def take_turn(deck, location, discard, knock_value):
     poss = possibilities(deck, location)
     min_points = points(best_hand(poss))
+    # throw_func = sapphire_throw if location == 'h' else choose_throw
+    throw_func = choose_throw
     if min_points <= knock_value:
         return None, False        
     if should_take_discard(deck, location, discard):
@@ -330,7 +357,7 @@ def take_turn(deck, location, discard, knock_value):
     else:
         pick = pick_from_deck(deck)
         pick.location = location
-    disc = choose_throw(deck, location)
+    disc = throw_func(deck, location)
     disc.location = 'd'        
     g = False if points(best_hand(possibilities(deck,location))) <= knock_value else True
     return disc, g
@@ -353,8 +380,10 @@ def deal():
             if knock_value == 1: knock_value = 0                    
     sapphire_wins = False
     score = 0
-    while game and cards_left > 2:
-        print '.',
+    turns = 0
+    while game and cards_left > 2 and turns < 50:
+        turns += 1
+        # print '.',
         if sapphire_turn:
             discard, game = take_turn(deck, 'h', discard, knock_value)
             if not game:
@@ -366,7 +395,10 @@ def deal():
                 score = points(best_hand(possibilities(deck,'h'))) 
         sapphire_turn = not sapphire_turn
         cards_left = card_count(deck, 'p')
-    print
+    # if sapphire_wins:
+    #     print score 
+    # else:
+    #     print -score        
     if cards_left > 2:    
         return sapphire_wins, score
     else:
@@ -381,21 +413,19 @@ def play():
             s_score += s
         else:
             o_score += s    
-    print 'Sapphire: %3i Opponent %3i' % (s_score, o_score)  
+    print 'Sapphire: %3i Opponent %3i' % (s_score, o_score)
+    return True if s_score > o_score else False  
 
 def test():
-    deck = make_deck(shuffle = True)
-    # set_locations(deck, 'AH AC AD 2S 3S AS 4S 9C JS JC', 'h')
-    # set_locations(deck, 'AH 2C 3D 4S 5C 6S 7D 8C 9S TC', 'h')
-    for pos in range(10):
-        row, col = get_coord(deck,pos)
-        deck[row][col].location = 'h'
-    show_locations(deck, 'h')
-    print
-    p = possibilities(deck, 'h')
-    print
-    show_orgs(p)
-
-play()
+    s = o = 0
+    for i in range(1000):
+        print i,
+        if play():
+            s += 1
+        else:
+            o += 1
+    print 'sappire wins: %4i opponent wins %4i' % (s,o)                
+    
+test()
 
 

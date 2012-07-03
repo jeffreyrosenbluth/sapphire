@@ -29,7 +29,7 @@ class Card(object):
     
 class Group(object):
     """a set of cards"""
-    def __init__(self, cards = None):
+    def __init__(self, cards = None, grps = None):
         if cards is None:
             self.cards = []
         else:
